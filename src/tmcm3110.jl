@@ -47,7 +47,7 @@ function decode_reply(device::TMCM3110, reply)
   return value
 end
 
-function query(device::TMCM3110, m_address, n_command, n_type, n_motor, value; timeout=3.0)
+function fetch(device::TMCM3110, m_address, n_command, n_type, n_motor, value; timeout=3.0)
     c = -1
     while c == -1
         try
@@ -84,7 +84,7 @@ function get_axis_parameter(device::TMCM3110, n_axisparameter, n_motor)
             r = ""
             while r == ""
                 try
-                    r = query(device, 1, 6, n_axisparameter, n_motor, 0)
+                    r = fetch(device, 1, 6, n_axisparameter, n_motor, 0)
                 catch err
                     @warn err 
                     sleep(0.5)
@@ -102,7 +102,7 @@ end
 function set_axis_parameter(device::TMCM3110, n_axisparameter, n_motor, value)
   if in(n_axisparameter, TMCM3110_AXIS_PARAMETER.keys)
       if in(n_motor, [0,1,2])
-          r = query(device, 1, 5, n_axisparameter, n_motor, value)
+          r = fetch(device, 1, 5, n_axisparameter, n_motor, value)
           return r
       else
           err("$n_motor is no a valid motor id. Nothing was done.")
@@ -116,7 +116,7 @@ function store_axis_parameter_permanent(device::TMCM3110, n_axisparameter, n_mot
     if in(n_axisparameter, TMCM3110_AXIS_PARAMETER.keys)
         if in(n_motor, [0,1,2])
             set_axis_parameter(device, n_axisparameter, n_motor, value) # first set the parameter to value,
-            r = query(device, 1, 7, n_axisparameter, n_motor, 0)        # then store it permanent
+            r = fetch(device, 1, 7, n_axisparameter, n_motor, 0)        # then store it permanent
         else
             err("$n_motor is no a valid motor id. Nothing was done.")
         end
@@ -125,8 +125,8 @@ function store_axis_parameter_permanent(device::TMCM3110, n_axisparameter, n_mot
     end
 end
 
-function list_all_axis_parameters(device::TMCM3110)
-    for key in sort(collect(keys(TMCM3110_AXIS_PARAMETER))) # wrong oder
+function list_all_axis_parameters(device::TMCM3110; pars = : )
+    for key in sort(collect(keys(TMCM3110_AXIS_PARAMETER)))[pars] # wrong oder
       axis_parameters = Any[0,0,0]
       for i in 1:3
         axis_parameters[i] = get_axis_parameter(device, key, i-1)
@@ -142,30 +142,32 @@ function list_all_axis_parameters(device::TMCM3110)
     return nothing
 end
 
-function move(device::TMCM3110, n_motor, value)
+list_motion_axis_parameters(device::TMCM3110) = list_all_axis_parameters(device::TMCM3110; pars = 1:4 )
+
+function move_to(device::TMCM3110, n_motor, value)
     try
         position = convert(Int32, value)
     catch
         err("value must be convertible to Int32")
     end
-    if in(n_motor, [0,1,2])
-        t = 0.
-	r = 0
-	while t < 10
-            try
-                r = query(device, 1, 4, 0, n_motor, convert(Int, value))
-		#return r            
-	    catch err
-             	@warn err
-            end
-	    sleep(2)
-	    t += 2
-	end
-	if t > 10
-	    error("Motor controller did not answer to move command.") 
-    	else
-	    return r
-	end
+    if n_motor in [0,1,2]
+		r = 0
+		t = 0
+		while t < 10
+	        try
+	            r = fetch(device, 1, 4, 0, n_motor, convert(Int,value))  
+				break
+		    catch err
+	             @warn err
+	        end
+			sleep(1)
+			t += 1
+		end
+		if t == 10
+		    error("Motor controller did not answer to move command.") 
+	    else
+		    return r
+		end
     else
         error("$n_motor is no a valid motor id. Must be in [0,1,2]. Nothing was done.")
     end
@@ -173,12 +175,12 @@ end
 
 function stop(device::TMCM3110; n_motor=-1)
     if in(n_motor, [0,1,2])
-        r = query(device, 1, 3, 0, n_motor, 0)
+        r = fetch(device, 1, 3, 0, n_motor, 0)
         return r
     else
         r = Int[]
         for m in [0,1,2]
-            push!(r, query(device, 1, 3, 0, m, 0))
+            push!(r, fetch(device, 1, 3, 0, m, 0))
         end
         return r
     end
@@ -278,6 +280,7 @@ TMCM3110_AXIS_PARAMETER = Dict(   0 => "target position",
                        194 => "ref. search speed",
                        195 => "ref. switch speed",
                        196 => "distance end switches",
+					   201 => "encoder mode",
                        204 => "freewheeling",
                        206 => "actual load value",
                        208 => "TMC262 errorflags",
@@ -313,3 +316,4 @@ TMCM3110_INTERRUPT_VECTORS = Dict(  0 => "Timer 0",
                           45 => "Input change 6",
                           46 => "Input change 7",
                          255 => "Global interrupts" )
+                    
