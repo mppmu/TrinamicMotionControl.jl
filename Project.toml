@@ -3,7 +3,9 @@ uuid = "36c24c14-3ff8-4745-ae4c-19a959bc73ea"
 version = "0.1.0"
 
 [deps]
+IntervalSets = "8197267c-284f-5f27-9208-e0e47529a953"
 Sockets = "6462fe0b-24de-5631-8697-dd941f90decc"
+Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
 [compat]
 julia = "1.6"

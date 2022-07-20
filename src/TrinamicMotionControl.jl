@@ -9,6 +9,9 @@ module TrinamicMotionControl
 
 using Sockets
 
+using IntervalSets
+using Unitful
+
 const Value = Union{<:Real, Missing}
 
 
