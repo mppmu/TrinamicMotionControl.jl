@@ -1,0 +1,8 @@
+name = "TrinamicMotionControl"
+uuid = "36c24c14-3ff8-4745-ae4c-19a959bc73ea"
+version = "0.1.0"
+
+[deps]
+
+[compat]
+julia = "1.6"
