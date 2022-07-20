@@ -7,6 +7,11 @@ Julia Trinamic Motion Controllers
 """
 module TrinamicMotionControl
 
+using Sockets
+
+const Value = Union{<:Real, Missing}
+
+
 include("tmcm3110.jl")
 include("motor.jl")
 
