@@ -49,7 +49,7 @@ function decode_reply(device::TMCM3110, reply)
   return value
 end
 
-function fetch(device::TMCM3110, m_address, n_command, n_type, n_motor, value; timeout=3.0)
+function query(device::TMCM3110, m_address, n_command, n_type, n_motor, value; timeout=3.0)
     c = -1
     while c == -1
         try
@@ -86,7 +86,7 @@ function get_axis_parameter(device::TMCM3110, n_axisparameter, n_motor)
             r = ""
             while r == ""
                 try
-                    r = fetch(device, 1, 6, n_axisparameter, n_motor, 0)
+                    r = query(device, 1, 6, n_axisparameter, n_motor, 0)
                 catch err
                     @warn err 
                     sleep(0.5)
@@ -104,7 +104,7 @@ end
 function set_axis_parameter(device::TMCM3110, n_axisparameter, n_motor, value)
   if in(n_axisparameter, TMCM3110_AXIS_PARAMETER.keys)
       if in(n_motor, [0,1,2])
-          r = fetch(device, 1, 5, n_axisparameter, n_motor, value)
+          r = query(device, 1, 5, n_axisparameter, n_motor, value)
           return r
       else
           err("$n_motor is no a valid motor id. Nothing was done.")
@@ -118,7 +118,7 @@ function store_axis_parameter_permanent(device::TMCM3110, n_axisparameter, n_mot
     if in(n_axisparameter, TMCM3110_AXIS_PARAMETER.keys)
         if in(n_motor, [0,1,2])
             set_axis_parameter(device, n_axisparameter, n_motor, value) # first set the parameter to value,
-            r = fetch(device, 1, 7, n_axisparameter, n_motor, 0)        # then store it permanent
+            r = query(device, 1, 7, n_axisparameter, n_motor, 0)        # then store it permanent
         else
             err("$n_motor is no a valid motor id. Nothing was done.")
         end
@@ -157,7 +157,7 @@ function move_to(device::TMCM3110, n_motor, value)
 		t = 0
 		while t < 10
 	        try
-	            r = fetch(device, 1, 4, 0, n_motor, convert(Int,value))  
+	            r = query(device, 1, 4, 0, n_motor, convert(Int,value))  
 				break
 		    catch err
 	             @warn err
@@ -177,12 +177,12 @@ end
 
 function stop(device::TMCM3110; n_motor=-1)
     if in(n_motor, [0,1,2])
-        r = fetch(device, 1, 3, 0, n_motor, 0)
+        r = query(device, 1, 3, 0, n_motor, 0)
         return r
     else
         r = Int[]
         for m in [0,1,2]
-            push!(r, fetch(device, 1, 3, 0, m, 0))
+            push!(r, query(device, 1, 3, 0, m, 0))
         end
         return r
     end
