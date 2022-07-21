@@ -1,26 +1,32 @@
 # This file is a part of TrinamicMotionControl.jl, licensed under the MIT License (MIT).
 
 
-struct TMCM3110
+"""
+    struct TMCLDevice
+
+Represents a TMCL device.
+"""
+struct TMCLDevice
     name::String
     ip::IPv4
     port::Int
-
-    function TMCM3110(name::String, ip::IPv4, port::Int)
-        device = new(name, ip, port)
-        return device
-    end
-
-    function Base.show(io::IO, device::TMCM3110)
-      for n in fieldnames(typeof(device))
-        println(io, "$n: $(getfield(device,n))")
-      end
-    end
+    busaddress::Int
 end
 
-Sockets.connect(device::TMCM3110) = connect(device.ip, device.port)
+export TMCLDevice
 
-function encode_command(device::TMCM3110, m_address::Int, n_command::Int, n_type::Int, n_motor::Int, value::Signed)
+TMCLDevice(name::AbstractString, ip::IPv4, port::Int) = TMCLDevice(name, ip, port, 1)
+
+TMCLDevice(name::AbstractString, hostname::AbstractString, port::Int, busaddress::Int = 1) = TMCLDevice(name, getaddrinfo(hostname), port, busaddress)
+
+
+# Deprecated, for backward compatibility:
+const TMCM3110 = TMCLDevice
+
+
+Sockets.connect(device::TMCLDevice) = connect(device.ip, device.port)
+
+function encode_command(device::TMCLDevice, m_address::Int, n_command::Int, n_type::Int, n_motor::Int, value::Signed)
   m_address = UInt8( m_address % (1<<8) )
   n_command = UInt8( n_command % (1<<8) )
   n_type    = UInt8( n_type % (1<<8)    )
@@ -35,7 +41,7 @@ function encode_command(device::TMCM3110, m_address::Int, n_command::Int, n_type
   return tmcl_bytes
 end
 
-function decode_reply(device::TMCM3110, reply)
+function decode_reply(device::TMCLDevice, reply)
   r_address  = UInt8( reply[1] )
   m_address  = UInt8( reply[2] )
   r_status   = UInt8( reply[3] )
@@ -49,44 +55,51 @@ function decode_reply(device::TMCM3110, reply)
   return value
 end
 
-function query(device::TMCM3110, m_address, n_command, n_type, n_motor, value; timeout=3.0)
-    c = -1
-    while c == -1
+function query(device::TMCLDevice, n_command, n_type, n_motor, value; timeout=3.0)
+    n_retries = 0
+    while n_retries <= 3
         try
-            c = connect(device)
-            break
-        catch err
-          @warn err
+            io = connect(device)
+            try
+                cmd = encode_command(device, device.busaddress, n_command, n_type, n_motor, value)
+                write(io, cmd )
+                t0 = time()
+                t = 0.
+                r=""
+                task = @async read(io, 9)
+                while t < timeout
+                    if task.state == :done break end
+                    t = time()-t0
+                    sleep(0.01)
+                end
+        
+                if t >= timeout
+                    error("Timeout! Device `$(device.name)` did not answer.")
+                else
+                    r = decode_reply(device, task.result)
+                    return r
+                end
+            finally
+                close(io)
+            end
+        catch  err
+            @warn err
         end
-        sleep(0.5)
-    end
-    cmd = encode_command(device, m_address, n_command, n_type, n_motor, value)
-    write(c, cmd )
-    t0 = time()
-    t = 0.
-    r=""
-    task = @async read(c, 9)
-    while t < timeout
-        if task.state == :done break end
-        t = time()-t0
-        sleep(0.01)
-    end
-    close(c)
-    if t >= timeout
-        error("Timeout! Device `$(device.name)` did not answer.")
-    else
-        r = decode_reply(device, task.result)
-        return r
+
+        if n_retries < 3
+            sleep(0.5)
+        end
+        n_retries += 1
     end
 end
 
-function get_axis_parameter(device::TMCM3110, n_axisparameter, n_motor)
+function get_axis_parameter(device::TMCLDevice, n_axisparameter, n_motor)
     if in(n_axisparameter, TMCM3110_AXIS_PARAMETER.keys)
         if in(n_motor, [0,1,2])
             r = ""
             while r == ""
                 try
-                    r = query(device, 1, 6, n_axisparameter, n_motor, 0)
+                    r = query(device, 6, n_axisparameter, n_motor, 0)
                 catch err
                     @warn err 
                     sleep(0.5)
@@ -101,10 +114,10 @@ function get_axis_parameter(device::TMCM3110, n_axisparameter, n_motor)
     end
 end
 
-function set_axis_parameter(device::TMCM3110, n_axisparameter, n_motor, value)
+function set_axis_parameter(device::TMCLDevice, n_axisparameter, n_motor, value)
   if in(n_axisparameter, TMCM3110_AXIS_PARAMETER.keys)
       if in(n_motor, [0,1,2])
-          r = query(device, 1, 5, n_axisparameter, n_motor, value)
+          r = query(device, 5, n_axisparameter, n_motor, value)
           return r
       else
           err("$n_motor is no a valid motor id. Nothing was done.")
@@ -114,11 +127,11 @@ function set_axis_parameter(device::TMCM3110, n_axisparameter, n_motor, value)
   end
 end
 
-function store_axis_parameter_permanent(device::TMCM3110, n_axisparameter, n_motor, value)
+function store_axis_parameter_permanent(device::TMCLDevice, n_axisparameter, n_motor, value)
     if in(n_axisparameter, TMCM3110_AXIS_PARAMETER.keys)
         if in(n_motor, [0,1,2])
             set_axis_parameter(device, n_axisparameter, n_motor, value) # first set the parameter to value,
-            r = query(device, 1, 7, n_axisparameter, n_motor, 0)        # then store it permanent
+            r = query(device, 7, n_axisparameter, n_motor, 0)        # then store it permanent
         else
             err("$n_motor is no a valid motor id. Nothing was done.")
         end
@@ -127,7 +140,7 @@ function store_axis_parameter_permanent(device::TMCM3110, n_axisparameter, n_mot
     end
 end
 
-function list_all_axis_parameters(device::TMCM3110; pars = : )
+function list_all_axis_parameters(device::TMCLDevice; pars = : )
     for key in sort(collect(keys(TMCM3110_AXIS_PARAMETER)))[pars] # wrong oder
       axis_parameters = Any[0,0,0]
       for i in 1:3
@@ -144,9 +157,9 @@ function list_all_axis_parameters(device::TMCM3110; pars = : )
     return nothing
 end
 
-list_motion_axis_parameters(device::TMCM3110) = list_all_axis_parameters(device::TMCM3110; pars = 1:4 )
+list_motion_axis_parameters(device::TMCLDevice) = list_all_axis_parameters(device::TMCLDevice; pars = 1:4 )
 
-function move_to(device::TMCM3110, n_motor, value)
+function move_to(device::TMCLDevice, n_motor, value)
     try
         position = convert(Int32, value)
     catch
@@ -157,7 +170,7 @@ function move_to(device::TMCM3110, n_motor, value)
 		t = 0
 		while t < 10
 	        try
-	            r = query(device, 1, 4, 0, n_motor, convert(Int,value))  
+	            r = query(device, 4, 0, n_motor, convert(Int,value))  
 				break
 		    catch err
 	             @warn err
@@ -175,14 +188,14 @@ function move_to(device::TMCM3110, n_motor, value)
     end
 end
 
-function stop(device::TMCM3110; n_motor=-1)
+function stop(device::TMCLDevice; n_motor=-1)
     if in(n_motor, [0,1,2])
-        r = query(device, 1, 3, 0, n_motor, 0)
+        r = query(device, 3, 0, n_motor, 0)
         return r
     else
         r = Int[]
         for m in [0,1,2]
-            push!(r, query(device, 1, 3, 0, m, 0))
+            push!(r, query(device, 3, 0, m, 0))
         end
         return r
     end

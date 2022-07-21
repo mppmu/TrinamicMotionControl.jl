@@ -183,9 +183,9 @@ function calibrate_motor(m::Motor; force::Bool = false)::Nothing
         end
         start_calibration = 0
         get_status = 2
-        query(m.motor_controller, 1, 13, start_calibration, m.id, 0)
+        query(m.motor_controller, 13, start_calibration, m.id, 0)
         sleep(0.05)
-        calibration_status = query(m.motor_controller, 1, 13, get_status, m.id, 0)
+        calibration_status = query(m.motor_controller, 13, get_status, m.id, 0)
         prog = ProgressUnknown("Calibrating $(m.name)", spinner = true)
         while calibration_status != 0
           sleep(1)
@@ -195,7 +195,7 @@ function calibrate_motor(m::Motor; force::Bool = false)::Nothing
               pos = round(m.encoder_position, digits = 2)
               next!(prog, spinner = "🐾👣", showvalues = [("Encoder Position", pos * unit(m))])
               sleep(0.05)
-              calibration_status = query(m.motor_controller, 1, 13, get_status, m.id, 0)
+              calibration_status = query(m.motor_controller, 13, get_status, m.id, 0)
           catch err
               @warn err
           end
@@ -214,7 +214,7 @@ end
 
 function abort_calibration(m::Motor)
     stop_calibration = 1
-    query(m.motor_controller, 1, 13, stop_calibration, m.id, 0)
+    query(m.motor_controller, 13, stop_calibration, m.id, 0)
 end
 
 function is_calibrated!(m::Motor)::Nothing #use after motor/encoder positions have been updated
